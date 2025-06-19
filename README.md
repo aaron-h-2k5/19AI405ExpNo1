@@ -44,161 +44,106 @@
 import random
 import time
 
-
-class Thing: 
-    """
-    This represents any physical object that can appear in an Environment. """
-
+class Thing:
     def is_alive(self):
-        """Things that are 'alive' should return true."""
         return hasattr(self, "alive") and self.alive
 
     def show_state(self):
-        """Display the agent's internal state. Subclasses should override."""
         print("I don't know how to show_state.")
 
 class Agent(Thing):
-    
-    """
-        An Agent is a subclass of a thing """
-    
-    def __init__(self,program = None):
+    def __init__(self, program=None):
         self.alive = True
         self.performance = 0
         self.program = program
-        
-    def can_grab(self,thing):
-        """Return True if this agent can grab this thing. Override for appropriate subclasses of Agent and thing."""
+
+    def can_grab(self, thing):
         return False
 
-def TableDrivenAgentProgram(table): 
-    """
-    [Figure 2.7]
-    This agent selects an action based on the percept sequence. It is practical only for tiny domains.
-    To customize it, provide as table a dictionary of all
-    {percept_sequence:action} pairs. """
+def TableDrivenAgentProgram(table):
     percepts = []
-    
 
     def program(percept):
-        action = None
         percepts.append(percept)
-        action = table.get(tuple(percepts))
-        return action 
+        return table.get(tuple(percepts), "Right" if percept[0] == (0, 0) else "Left")
     return program
 
-room_A, room_B = (0,0),(1,0) #two rooms where Doctor can treat
+room_A, room_B = (0, 0), (1, 0)
 
 def TableDrivenDoctorAgent():
-    """
-    Tabular approach towards hospital function.
-    """
-    
     table = {
         ((room_A, "healthy"),): "Right",
         ((room_A, "unhealthy"),): "treat",
         ((room_B, "healthy"),): "Left",
         ((room_B, "unhealthy"),): "treat",
-        ((room_A, "unhealthy"),(room_A, "healthy")): "Right",
-        ((room_A, "healthy"), (room_B, "unhealthy")): "treat",
-        ((room_B, "healthy"), (room_A, "unhealthy")): "treat",
-        ((room_B, "unhealthy"), (room_B, "healthy")): "Left",
-        ((room_A, "unhealthy"), (room_A, "healthy"), (room_B, "unhealthy")): "treat",
-        ((room_B, "unhealthy"), (room_B, "healthy"), (room_A, "unhealthy")): "treat",
     }
     return Agent(TableDrivenAgentProgram(table))
 
-TableDrivenDoctorAgent()
-
 class Environment:
-    """Abstract class representing an Environment. 'Real' Environment classes inherit from this. Your Environment will typically need to implement:
-    percept:	Define the percept that an agent sees. execute_action:	Define the effects of executing an action.
-    Also update the agent.performance slot.
-    The environment keeps a list of .things and .agents (which is a subset of .things). Each agent has a .performance slot, initialized to 0.
-    Each thing has a .location slot, even though some environments may not need this."""
-    
     def __init__(self):
-        self.thing = []
+        self.things = []
         self.agents = []
-        
-    def percept(self,agent):
-        """Return the percept that the agent sees at this point. (Implement this.)"""
+
+    def percept(self, agent):
         raise NotImplementedError
-        
-    def execute_action(self,agent,action):
-        """Change the world to reflect this action. (Implement this.)""" 
+
+    def execute_action(self, agent, action):
         raise NotImplementedError
-        
+
     def default_location(self, thing):
-        """Default location to place a new thing with unspecified location."""
         return None
 
     def is_done(self):
-        """By default, we're done when we can't find a live agent.""" 
         return not any(agent.is_alive() for agent in self.agents)
-    
+
     def step(self):
-        """Run the environment for one time step. If the
-        actions and exogenous changes are independent, this method will do. If there are interactions between them, you'll need to override this method."""
         if not self.is_done():
             actions = []
             for agent in self.agents:
                 if agent.alive:
                     actions.append(agent.program(self.percept(agent)))
-                else:
-                    actions.append("")
             for (agent, action) in zip(self.agents, actions):
-                self.execute_action(agent,action)
-    
+                self.execute_action(agent, action)
+
     def run(self, steps=1000):
-        """Run the Environment for given number of time steps."""
         for step in range(steps):
             if self.is_done():
-                return 
+                return
             self.step()
-            
+
     def add_thing(self, thing, location=None):
-        """Add a thing to the environment, setting its location. For convenience, if thing is an agent program we make a new agent for it. (Shouldn't need to override this.)"""
         if not isinstance(thing, Thing):
             thing = Agent(thing)
-        if thing in self.thing:
-            print("Can't add the same thing twice") 
+        if thing in self.things:
+            print("Can't add the same thing twice")
         else:
-            thing.location = (location if location is not None else self.default_location(thing))
-            self.thing.append(thing) 
+            thing.location = location if location is not None else self.default_location(thing)
+            self.things.append(thing)
             if isinstance(thing, Agent):
-                thing.performance = 0 
+                thing.performance = 0
                 self.agents.append(thing)
 
     def delete_thing(self, thing):
-        """Remove a thing from the environment."""
-        try:
-            
-            self.things.remove(thing) 
-        except ValueError as e:
-            print(e)
-            print(" in Environment delete_thing")
-            print(" Thing to be removed: {} at {}".format(thing, thing.location))
-            print(" from list: {}".format([(thing, thing.location) for thing in self.things]))
-        if thing in self.agents: 
+        if thing in self.things:
+            self.things.remove(thing)
+        if thing in self.agents:
             self.agents.remove(thing)
 
 class TrivialDoctorEnvironment(Environment):
-    """This environment has two locations, A and B. Each can be unhealthy or healthy. The agent perceives its location and the location's status. This serves as an example of how to implement a simple Environment."""
-    
     def __init__(self):
         super().__init__()
-        self.status = {room_A: random.choice(["healthy" , "unhealthy"]), room_B: random.choice(["healthy", "unhealthy"]),}
-        
+        self.status = {
+            room_A: random.choice(["healthy", "unhealthy"]),
+            room_B: random.choice(["healthy", "unhealthy"]),
+        }
+
     def thing_classes(self):
         return [TableDrivenDoctorAgent]
-    
-    def percept(self,agent):
-        """Returns the agent's location, and the location status (unhealthy/healthy)."""
+
+    def percept(self, agent):
         return agent.location, self.status[agent.location]
-    
-    def execute_action(self,agent,action):
-        """Change agent's location and/or location's status; track performance. Score 10 for each treatment; -1 for each move."""
+
+    def execute_action(self, agent, action):
         if action == "Right":
             agent.location = room_B
             agent.performance -= 1
@@ -206,36 +151,37 @@ class TrivialDoctorEnvironment(Environment):
             agent.location = room_A
             agent.performance -= 1
         elif action == "treat":
-            tem=float(input("Enter your temperature")) 
-            if tem>=98.5:
-                self.status[agent.location] == "unhealthy"
-                print("medicine prescribed: paracetamol and anti-biotic(low dose)")
+            temp = float(input(f"Enter patient temperature in room {agent.location}: "))
+            if temp > 98.5:
+                print("Medicine prescribed: Paracetamol and low-dose antibiotic.")
+                self.status[agent.location] = "healthy"
                 agent.performance += 10
             else:
-                self.status[agent.location] = "healthy" 
-            self.status[agent.location] = "healthy"
-            
+                print("No medicine needed.")
+                self.status[agent.location] = "healthy"
+
     def default_location(self, thing):
-           
         return random.choice([room_A, room_B])
 
-if   __name__ == "__main__":
-    
-    agent = TableDrivenDoctorAgent() 
-    environment = TrivialDoctorEnvironment() 
+if __name__ == "__main__":
+    agent = TableDrivenDoctorAgent()
+    environment = TrivialDoctorEnvironment()
     environment.add_thing(agent)
-    print("\tStatus of patients in rooms before treatment")
+
+    print("\nInitial Room Status:")
     print(environment.status)
-    print("AgentLocation : {0}".format(agent.location)) 
-    print("Performance : {0}".format(agent.performance))
-    time.sleep(3)
+    print(f"Agent Location: {agent.location}")
+    print(f"Performance: {agent.performance}")
+
+    time.sleep(2)
     for i in range(2):
         environment.run(steps=1)
-        print("\n\tStatus of patient in room after the treatment") 
-        print(environment.status)
-        print("AgentLocation : {0}".format(agent.location)) 
-        print("Performance : {0}".format(agent.performance)) 
-        time.sleep(3)
+        print(f"\nAfter Step {i+1}:")
+        print("Room Status:", environment.status)
+        print("Agent Location:", agent.location)
+        print("Performance:", agent.performance)
+        time.sleep(2)
+
 ```
 
 ## Output:
